@@ -1,107 +1,70 @@
 # frozen_string_literal: true
 
-require 'uri'
-require 'net/http'
-require 'json'
+require 'mechanize'
 
-# Get Skey
+# login bf
 class BeanfunClient
-  def initialize(username, password)
+  def initialize(username, account, password)
+    @skey_url = 'https://tw.beanfun.com/beanfun_block/bflogin/default.aspx?service_code=999999&service_region=T0'
+    @agent = Mechanize.new do |a|
+      a.user_agent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/50.0.2661.102 Safari/537.36'
+      a.user_agent_alias = 'Windows Chrome'
+    end
     @username = username
+    @account = account
     @password = password
-    @headers = {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36"
-    }
-    # @headers_tmp = {
-    #   "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
-    #   "Accept-Encoding": "gzip, deflate, br",
-    #   "Accept-Language": "zh-TW,zh;q=0.9",
-    #   "Connection": "keep-alive",
-    #   "Host": "tw.newlogin.beanfun.com",
-    #   "sec-ch-ua": %{"Google Chrome";v="107", "Chromium";v="107", "Not=A?Brand";v="24"},
-    #   "sec-ch-ua-mobile": "?0",
-    #   "sec-ch-ua-platform": "Windows",
-    #   "Sec-Fetch-Dest": "document",
-    #   "Sec-Fetch-Mode": "navigate",
-    #   "Sec-Fetch-Site": "none",
-    #   "Sec-Fetch-User": "?1",
-    #   "Upgrade-Insecure-Requests": "1",
-    #   "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36"
-    # }
+    @bfwebtoken = ''
   end
 
-  def beanfun_login
-    # skey = login_page_uri
-    login_data = {
-      '__EVENTTARGET': '',
-      '__EVENTARGUMENT': '',
-      '__VIEWSTATE': viewstate,
-      '__VIEWSTATEGENERATOR': viewstateGenerator,
-      '__EVENTVALIDATION': eventvalidation,
-      't_AccountID': @username,
-      't_Password': @password,
-      'btn_login': '登入'
-    }
-    http = Net::HTTP.new(login_page_uri.host, login_page_uri.port)
-    http.use_ssl = true
-    res = http.get_response(login_page_uri.path)
-    # login_page_res = Net::HTTP.get_response(login_page_uri)
-    # puts login_page_res.body if login_page_res.is_a?(Net::HTTPSuccess)
+  def login_processor
+    puts '-----------------------------------'
+    puts '| [1/3][執行] 正在合成登入網址...'
+    login_url = login_url_getter
+    puts "| [2/3][執行] 使用者'#{@username}'登入Beanfun中..."
+    akey = login_beanfun(login_url)
+    puts "| [2/3][成功] 使用者'#{@username}'驗證成功, Akey: '#{akey}'"
+    @bfwebtoken = bfwebtoken_getter(akey)
+    puts "| [3/3][成功] 使用者'#{@username}'登入成功..."
+    puts '-----------------------------------'
+    nil
+  end
+
+  def start_game_processor
+    # 取得遊戲帳號
+    # 取得otp
+    # 用DES解密otp
   end
 
   private
-  
-  def login_page_uri
-    # 先取得 skey
-    uri = URI('https://tw.beanfun.com/beanfun_block/bflogin/default.aspx?service_code=999999&service_region=T0')
-    res = Net::HTTP.get_response(uri)
-    skey = res.body.match(/\d\w+;*/).to_s
-    
-    uri = URI(res['location'])
-    redirect = Net::HTTP::Get.new(uri.path)
-    re_0 = Net::HTTP.start(uri.path, uri.port, use_ssl: true, headers: %{"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36"}) { |http| http.request(redirect) }
-    
-    redirect = Net::HTTP::GET.new(re_0.path)
-    re_2 = Net::HTTP.start(uri.path, uri.port, use_ssl: true, **@headers) { |http| http.request(redirect) }
-    
-    redirect = Net::HTTP::GET.new("/id-pass_form.aspx?skey=#{skey}")
-    re_target = Net::HTTP.start(uri.path, uri.port, use_ssl: true, **@headers) { |http| http.request(redirect) }
-    
-    # 把取得的 skey 放入登入頁的 uri
-    uri = [
-      URI("https://tw.newlogin.beanfun.com/checkin.aspx?skey=#{skey}&display_mode=0"),
-      URI("https://tw.newlogin.beanfun.com/checkin_step2.aspx?skey=#{skey}&display_mode=2"),
-      URI("https://tw.newlogin.beanfun.com/login/id-pass_form.aspx?skey=#{skey}&clientID=undefined"),
-      URI("https://tw.newlogin.beanfun.com/login/id-pass_form.aspx?skey=#{skey}")
-    ]
-    res = Net::HTTP.get_response(uri[0])
-    res = Net::HTTP.get_response(uri[1])
+
+  # 取得session key, 並合成login_page網址
+  def login_url_getter
+    skey = @agent.get(@skey_url).body.match(/strSessionKey = "(.*?)"/)[1]
+    "https://tw.newlogin.beanfun.com/login/id-pass_form.aspx?skey=#{skey}"
   end
-end
 
-# utility
-def uri_get(some_uri, headers)
-  uri = some_uri
-  http = Net::HTTP.new(uri.host, uri.port)
-  http.use_ssl = uri.scheme == 'https'
-  req = Net::HTTP::Get.new(uri, headers)
-  res = http.request(req)   # 發送請求
-  # if res.kind_of? Net::HTTPSuccess
-  #   res_body = JSON.parse(res.body) # 取得回應，並解析 JSON
-  # end
-end
+  # 登入bf帳號
+  def login_beanfun(login_url)
+    login_page = @agent.get(login_url)
+    login_page.form.field_with('t_AccountID').value = @account
+    login_page.form.field_with('t_Password').value = @password
 
-def fetch_uri(uri_str, limit = 10)
-  # You should choose better exception.
-  raise ArgumentError, 'HTTP redirect too deep' if limit == 0
+    # POST 出資訊後, 並返回auth key
+    login_result = login_page.form.click_button
+    login_result.inspect.match(/akey=(\w+)/)[1]
+  end
 
-  url = URI uri_str
-  req = Net::HTTP::Get.new(url.path)
-  response = Net::HTTP.start(url.host, url.port, use_ssl: true) { |http| http.request(req) }
-  case response
-  when Net::HTTPSuccess     then response
-  when Net::HTTPRedirection then fetch_uri(response['location'], limit - 1)
-  else
-    response.error!
+  # 跑完登入程序, 取得bfWebToken
+  def bfwebtoken_getter(akey)
+    # 使用akey合成final_step網址, 並GET 該網址
+    final_step_url = "https://tw.newlogin.beanfun.com/login/final_step.aspx?akey=#{akey}"
+    @agent.get(final_step_url)
+
+    # 最後將skey + akey 一起 POST 出去, 完成登入
+    @agent.post('https://tw.beanfun.com/beanfun_block/bflogin/return.aspx')
+
+    # 完成登入後, 回到BF首頁, 取得 bfWebToken
+    @agent.get('https://tw.beanfun.com')
+    @agent.cookies.to_s.match(/"bfWebToken", value="(.*?)"/)[1]
   end
 end
