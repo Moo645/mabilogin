@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'mechanize'
+require 'openssl'
 
 # login bf
 class BeanfunClient
@@ -21,13 +22,13 @@ class BeanfunClient
 
   def login_processor
     puts '------------------------------------------------------------------'
-    puts '| [1/3][執行] 正在合成登入網址...'
+    puts '| [1/4] 正在合成登入網址...'
     login_url = login_url_getter
-    puts "| [2/3][執行] 使用者'#{@username}'登入Beanfun中..."
+    puts '| [2/4] 登入Beanfun中...'
     @akey = login_beanfun(login_url)
-    puts "| [2/3][成功] 使用者'#{@username}'驗證成功, Akey: '#{@akey}'"
+    puts "| [3/4] 驗證成功, Akey: '#{@akey}'"
     @bfwebtoken = bfwebtoken_getter
-    puts "| [3/3][成功] 使用者'#{@username}'登入成功, bfwebtoken: '#{@bfwebtoken}'"
+    puts "| [4/4] 登入成功, bfwebtoken: '#{@bfwebtoken}'"
     puts '------------------------------------------------------------------'
     nil
   end
@@ -35,7 +36,7 @@ class BeanfunClient
   def start_game_processor
     # 取得遊戲帳號資訊
     @agent.get('https://tw.beanfun.com/game_zone/')
-    puts '取得遊戲帳號資訊'
+    puts '取得遊戲帳號OTP中:'
     game_zone_url = "https://tw.beanfun.com/beanfun_block/auth.aspx?channel=game_zone&page_and_query=game_start.aspx%3Fservice_code_and_region%3D#{@service_code}_#{@region}&web_token=#{@bfwebtoken}"
     game_info = @agent.get(game_zone_url).body.match(/id="(.*?)" sn="(.*?)" name="(.*?)"/).to_a
     @acc, @sopt, @name = game_info[1..3]
@@ -80,20 +81,29 @@ class BeanfunClient
     # puts '取得 acc 的 otp - 步驟5'
     @uptime = Time.now.to_i - @uptime
     otp_url3 = "http://tw.beanfun.com/beanfun_block/generic_handlers/get_webstart_otp.ashx?SN=#{long_polling_key}&WebToken=#{@bfwebtoken}&SecretCode=#{m_str_secret_code}&ppppp=1F552AEAFF976018F942B13690C990F60ED01510DDF89165F1658CCE7BC21DBA&ServiceCode=#{@service_code}&ServiceRegion=#{@region}&ServiceAccount=#{@acc}&CreateTime=#{secreate_time.gsub(' ', '%20')}&d=#{@uptime*1000}"
-    opt_result = @agent.get(otp_url3).body
+    otp_result = @agent.get(otp_url3).body
     
-    return false if opt_result[0] != '1'
+    return false if otp_result[0] != '1'
     
-    key = opt_result[2..10]
-    data = opt_result[10..]
-    puts "#{key}, #{data}"
-    puts '--------------------------------------------------------------'
-    # 用DES解密otp
+    key = otp_result[2..9]
+    data = otp_result[10..]
+    puts "取得加密資料成功: #{otp_result[2..]}"
+    puts "KEY : #{key}", "DATA: #{data}"
 
-    return true
+    otp = des_decrypt(key, data)
+    puts "解密成功, OTP: #{otp}"
   end
 
   private
+
+  def des_decrypt(key, data)
+    cipher = OpenSSL::Cipher.new('des-ecb').decrypt
+    data_hex = [data].pack('H*')
+    cipher.key = key
+    cipher.padding = 0
+    result = cipher.update(data_hex)
+    result << cipher.final
+  end
 
   # 取得session key, 並合成login_page網址
   def login_url_getter
@@ -129,15 +139,13 @@ class BeanfunClient
     # puts @agent.cookie_jar.jar
     @agent.cookies.to_s.match(/"bfWebToken", value="(.*?)"/)[1]
   end
-
-  def decrypt_des(data, key); end
 end
 
 def test
-  puts "Test"
-  usr = 'Willy'
+  usr = ''
   acc = ''
   pwd = ''
+  puts "使用者: #{usr}"
 
   bf_c = BeanfunClient.new(usr,acc,pwd)
   bf_c.login_processor()
