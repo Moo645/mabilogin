@@ -37,7 +37,7 @@ module OtpHandler
     return puts "取得 OTP 時出現異常: #{otp_data}" if otp_data[0] != '1'
 
     # [7/7] 解密OTP, 並回傳
-    puts "取得加密資料成功: #{otp_data[2..]}", "帳號: #{acc_id}"
+    puts "取得加密資料成功: #{otp_data[2..]}"
     return { acc_id: acc_id, otp: otp_decrypt(otp_data) }
   end
 
