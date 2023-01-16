@@ -19,21 +19,22 @@ module MabiUtils
 
     def open_mabi(login)
       args = [
-        'C:\Nexon\Mabinogi\Mabinogi.exe',
+        'C:\Nexon\Mabinogi\Client.exe',
         'code:1622',
         'ver:343',
         'logip:210.208.80.6',
         'logport:11000',
         'chatip:210.208.80.10',
         'chatport:8004',
-        'setting:\"file://data/features.xml=Regular, Taiwan\"',
+        'setting:"file://data/features.xml=Regular, Taiwan"',
         "/N:#{login[:acc_id]}",
         "/V:#{login[:otp]}",
         '/T:gamania'
       ].join(' ')
+
+      Dir.chdir('../../../Nexon/Mabinogi')
       system("start #{args}")
     end
-
   end
 
   # 顯示預登入的帳號清單
